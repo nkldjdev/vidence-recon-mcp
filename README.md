@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.svg" alt="vidence-recon-mcp" width="100%">
+  <img src="assets/scope1.png" alt="vidence-recon-mcp" width="100%">
 </p>
 
 <h1 align="center">vidence-recon-mcp</h1>
