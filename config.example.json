@@ -12,6 +12,11 @@
     "commandTimeoutSec": 300,
     "maxOutputBytes": 1048576
   },
+  "runner": {
+    "mode": "local",
+    "container": "vidence-kali",
+    "dockerPath": "docker"
+  },
   "tools": {
     "nmap": "nmap",
     "nuclei": "nuclei"

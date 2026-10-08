@@ -79,13 +79,21 @@ export function buildServer(cfg: Config): McpServer {
           args = [...args, ...extra];
         }
 
-        // 4. Run.
+        // 4. Run — either the binary directly (local) or inside a persistent
+        //    Kali container via `docker exec` (docker mode).
         await rateGate(cfg.safety.minIntervalMs);
-        const binary = cfg.tools[spec.binaryKey] || spec.binary;
+        const toolBinary = cfg.tools[spec.binaryKey] || spec.binary;
+        let binary = toolBinary;
+        let runArgs = args;
+        if (cfg.runner.mode === "docker") {
+          binary = cfg.runner.dockerPath;
+          runArgs = ["exec", cfg.runner.container, toolBinary, ...args];
+        }
         const timeoutMs = (spec.timeoutSec ?? cfg.limits.commandTimeoutSec) * 1000;
-        const res = await run(binary, args, { timeoutMs, maxBytes: cfg.limits.maxOutputBytes });
+        const res = await run(binary, runArgs, { timeoutMs, maxBytes: cfg.limits.maxOutputBytes });
 
-        const header = `$ ${binary} ${args.join(" ")}\n(scope: ${scope.reason})\n`;
+        const shown = cfg.runner.mode === "docker" ? `${toolBinary} ${args.join(" ")}` : `${binary} ${args.join(" ")}`;
+        const header = `$ ${shown}\n(scope: ${scope.reason})\n`;
         if (res.timedOut) return text(`${header}\n[timed out after ${timeoutMs / 1000}s]\n${res.stdout}`);
         const body = res.stdout || res.stderr || `[no output, exit ${res.code}]`;
         return text(`${header}\n${body}`);

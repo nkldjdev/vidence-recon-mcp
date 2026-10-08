@@ -80,16 +80,20 @@ lines (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 and produces a scoped, methodology-driven assessment. Defined in
 [`src/playbooks.ts`](src/playbooks.ts).
 
-## Running it — two ways
+## Running it — three ways
 
-- **A) Docker (recommended):** the image is **Kali + all the tools + Node + the server**, so
-  there is nothing to install on the host. Your MCP client runs the container; the playbooks
-  execute against the tools inside the same Kali image.
-- **B) Local Node:** run the server with `node` and supply the tools yourself (on `PATH` — a
-  Kali/Debian box or WSL). Node.js ≥ 18. A missing binary returns a clear "not found" message,
-  not a crash.
+- **A) Docker all-in-one:** the image is **Kali + all the tools + Node + the server**; the MCP
+  client runs the container with `docker run -i`. Simplest on **Linux/macOS**. ⚠️ **Not
+  recommended on Windows** — Docker Desktop's `docker run -i` stdio is unreliable there and the
+  server will disconnect. Use B instead.
+- **B) Native server + Kali container (recommended on Windows):** run the server with `node` on
+  the host, and it runs the tools via `docker exec` into a **persistent Kali container** built
+  from this same image. The Claude↔server channel is native Node (reliable everywhere); only the
+  tools run in Docker. No per-connection container startup.
+- **C) Local Node:** run the server with `node` and supply the tools yourself on `PATH` (a
+  Kali/Debian box or WSL). Node.js ≥ 18. A missing binary returns a clear "not found" message.
 
-### A) Docker — self-contained
+### A) Docker all-in-one (Linux/macOS)
 
 ```bash
 git clone https://github.com/nkldjdev/vidence-recon-mcp.git
@@ -126,7 +130,48 @@ claude mcp add vidence-recon -- docker run -i --rm --cap-add=NET_RAW --cap-add=N
 `NET_RAW`/`NET_ADMIN` let `nmap` run SYN scans. Prefer a config file over the env var? Mount it:
 add `"-v", "/abs/path/config.json:/app/config.json"` to the args.
 
-### B) Local Node
+### B) Native server + Kali container (recommended on Windows)
+
+Build the image (it's used as the tool host), start it as a **persistent idle container**, and
+build the server to run natively:
+
+```bash
+git clone https://github.com/nkldjdev/vidence-recon-mcp.git
+cd vidence-recon-mcp
+docker build -t vidence-recon-mcp .                         # Kali + tools (several GB)
+docker run -d --name vidence-kali \
+  --cap-add=NET_RAW --cap-add=NET_ADMIN \
+  --entrypoint sleep vidence-recon-mcp infinity              # idle Kali tool host
+npm install && npm run build                                 # build the native server
+```
+
+Point Claude at the **native node server**, with runner set to `docker` so tools run via
+`docker exec vidence-kali <tool>`:
+
+**Claude Desktop** — `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "vidence-recon": {
+      "command": "node",
+      "args": ["C:\\path\\to\\vidence-recon-mcp\\dist\\index.js"],
+      "env": {
+        "VIDENCE_RECON_MCP_ALLOWED_TARGETS": "app.example.com,example.com",
+        "VIDENCE_RECON_MCP_RUNNER": "docker",
+        "VIDENCE_RECON_MCP_CONTAINER": "vidence-kali"
+      }
+    }
+  }
+}
+```
+
+The server talks to Claude over native stdio (reliable on Windows), and shells each tool into the
+always-running `vidence-kali` container. After a reboot or Docker restart, bring the tool host
+back with `docker start vidence-kali`. Both `node` and `docker` must be on the PATH Claude
+launches with (they usually are); otherwise use full paths.
+
+### C) Local Node
 
 ```bash
 git clone https://github.com/nkldjdev/vidence-recon-mcp.git
