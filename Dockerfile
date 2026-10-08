@@ -17,7 +17,9 @@
 FROM node:20-slim AS build
 WORKDIR /app
 COPY package*.json tsconfig.json ./
-RUN npm ci
+# --ignore-scripts: skip the package.json "prepare" hook, which would run `tsc`
+# before src/ is copied (src is copied on the next line). We build explicitly.
+RUN npm ci --ignore-scripts
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
