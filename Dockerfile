@@ -1,12 +1,19 @@
-# Builds the vidence-recon-mcp Node server. It does NOT bundle the security tools
-# themselves — run it on a host (e.g. Kali/Debian) where nmap/nuclei/etc. are on
-# PATH, or extend this image to add them.
+# vidence-recon-mcp — all-in-one image: Kali + security tools + Node + the MCP server.
 #
-# NOTE on licensing: if you choose to add GPL tools below and redistribute the
-# resulting image, you are redistributing those tools and must comply with their
-# licenses (source availability, etc.). Invoking them as separate processes does
-# not relicense this MIT code, but bundling + distributing does carry obligations.
+# The MCP client runs this container over stdio; the server executes its
+# playbooks against the tools that live INSIDE this same Kali image, so there is
+# nothing to install on the host. This is the self-contained "MCP ↔ Kali" build.
+#
+# Build:  docker build -t vidence-recon-mcp .
+# Run  :  docker run -i --rm --cap-add=NET_RAW --cap-add=NET_ADMIN \
+#            -e VIDENCE_RECON_MCP_ALLOWED_TARGETS=vidence.io vidence-recon-mcp
+#
+# LICENSING: this image bundles third-party tools (nmap, nuclei, sqlmap, …),
+# each under its own license. Running them as separate processes does not
+# relicense this MIT code, but if you redistribute the built image you are
+# redistributing those tools and must honor their licenses.
 
+# ---- stage 1: compile the TypeScript server with Node -----------------------
 FROM node:20-slim AS build
 WORKDIR /app
 COPY package*.json tsconfig.json ./
@@ -14,14 +21,33 @@ RUN npm ci
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
-FROM node:20-slim
+# ---- stage 2: Kali runtime with the tools + Node ----------------------------
+FROM kalilinux/kali-rolling
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Node runtime + the detection toolset. seclists/wordlists give the fuzzing
+# playbooks a wordlist at /usr/share/seclists and /usr/share/wordlists.
+RUN apt-get update && \
+    apt-get -y install --no-install-recommends \
+      nodejs \
+      nmap nikto whatweb sslscan gobuster ffuf nuclei wpscan sqlmap \
+      dnsutils curl ca-certificates \
+      seclists wordlists && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Optional extras that may not exist in every mirror — never fail the build.
+RUN apt-get update && apt-get -y install --no-install-recommends dnsx 2>/dev/null; \
+    apt-get clean && rm -rf /var/lib/apt/lists/* || true
+
+# Pre-pull Nuclei templates so the first scan isn't slow (ignore if offline).
+RUN nuclei -update-templates 2>/dev/null || true
+
 WORKDIR /app
-ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY config.example.json ./config.example.json
-COPY README.md DISCLAIMER.md LICENSE ./
+COPY config.example.json README.md DISCLAIMER.md LICENSE ./
 
-# MCP speaks over stdio; no ports are exposed. Provide config via a mount or env:
-#   docker run -i --rm -e VIDENCE_RECON_MCP_ALLOWED_TARGETS=example.com vidence-recon-mcp
+# MCP speaks over stdio — no ports exposed. Provide scope via env or a mounted
+# config.json (mount to /app/config.json). The server refuses any out-of-scope
+# target regardless.
 ENTRYPOINT ["node", "dist/index.js"]

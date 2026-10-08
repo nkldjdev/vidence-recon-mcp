@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/scope1.png" alt="vidence-recon-mcp" width="100%">
+  <img src="assets/banner.svg" alt="vidence-recon-mcp" width="100%">
 </p>
 
 <h1 align="center">vidence-recon-mcp</h1>
@@ -80,26 +80,62 @@ lines (see [CONTRIBUTING.md](CONTRIBUTING.md)).
 and produces a scoped, methodology-driven assessment. Defined in
 [`src/playbooks.ts`](src/playbooks.ts).
 
-## Requirements
+## Running it — two ways
 
-- Node.js ≥ 18
-- The underlying tools you want to use, on `PATH` (or pathed in `config.json`). Easiest is to run
-  on a Kali/Debian box, or any host with the relevant packages installed. The server degrades
-  gracefully: a missing binary returns a clear "not found" message, not a crash.
+- **A) Docker (recommended):** the image is **Kali + all the tools + Node + the server**, so
+  there is nothing to install on the host. Your MCP client runs the container; the playbooks
+  execute against the tools inside the same Kali image.
+- **B) Local Node:** run the server with `node` and supply the tools yourself (on `PATH` — a
+  Kali/Debian box or WSL). Node.js ≥ 18. A missing binary returns a clear "not found" message,
+  not a crash.
 
-## Install
+### A) Docker — self-contained
 
 ```bash
-git clone https://github.com/OWNER/vidence-recon-mcp.git
+git clone https://github.com/nkldjdev/vidence-recon-mcp.git
 cd vidence-recon-mcp
-npm install
-npm run build
-cp config.example.json config.json   # then edit scope.allowedTargets
+docker build -t vidence-recon-mcp .   # Kali + tools + server; several GB, first build is slow
 ```
 
-## Configure
+Point Claude at the container (MCP speaks over stdio):
 
-Edit `config.json` (see [`config.example.json`](config.example.json)):
+**Claude Desktop** — `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "vidence-recon": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "--cap-add=NET_RAW", "--cap-add=NET_ADMIN",
+        "-e", "VIDENCE_RECON_MCP_ALLOWED_TARGETS=app.example.com,example.com",
+        "vidence-recon-mcp"
+      ]
+    }
+  }
+}
+```
+
+**Claude Code (CLI):**
+
+```bash
+claude mcp add vidence-recon -- docker run -i --rm --cap-add=NET_RAW --cap-add=NET_ADMIN -e VIDENCE_RECON_MCP_ALLOWED_TARGETS=app.example.com vidence-recon-mcp
+```
+
+`NET_RAW`/`NET_ADMIN` let `nmap` run SYN scans. Prefer a config file over the env var? Mount it:
+add `"-v", "/abs/path/config.json:/app/config.json"` to the args.
+
+### B) Local Node
+
+```bash
+git clone https://github.com/nkldjdev/vidence-recon-mcp.git
+cd vidence-recon-mcp
+npm install && npm run build
+cp config.example.json config.json    # then edit scope.allowedTargets
+```
+
+`config.json` (see [`config.example.json`](config.example.json)):
 
 ```jsonc
 {
@@ -109,17 +145,15 @@ Edit `config.json` (see [`config.example.json`](config.example.json)):
 }
 ```
 
-Environment overrides: `VIDENCE_RECON_MCP_CONFIG`, `VIDENCE_RECON_MCP_ALLOWED_TARGETS=a,b,c`,
+Env overrides: `VIDENCE_RECON_MCP_CONFIG`, `VIDENCE_RECON_MCP_ALLOWED_TARGETS=a,b,c`,
 `VIDENCE_RECON_MCP_ALLOW_INTRUSIVE=true`.
 
-## Connect to Claude
-
-**Claude Desktop** — add to `claude_desktop_config.json`:
+**Claude Desktop:**
 
 ```json
 {
   "mcpServers": {
-    "pentest": {
+    "vidence-recon": {
       "command": "node",
       "args": ["/absolute/path/to/vidence-recon-mcp/dist/index.js"],
       "env": { "VIDENCE_RECON_MCP_CONFIG": "/absolute/path/to/vidence-recon-mcp/config.json" }
@@ -128,24 +162,11 @@ Environment overrides: `VIDENCE_RECON_MCP_CONFIG`, `VIDENCE_RECON_MCP_ALLOWED_TA
 }
 ```
 
-**Claude Code (CLI):**
+### Then run
 
-```bash
-claude mcp add pentest -- node /absolute/path/to/vidence-recon-mcp/dist/index.js
-```
-
-Then ask: *"Run the web_quickscan playbook against https://app.example.com"* (it must be in your
-allowlist).
-
-## Docker
-
-```bash
-docker build -t vidence-recon-mcp .
-# the image bundles the Node server; mount your config and run against your Kali tools as needed
-```
-
-See the `Dockerfile` header for the tool-bundling note and the licensing implications of
-redistributing an image that contains third-party tools.
+Restart Claude and ask: *"Run the `web_quickscan` playbook against https://app.example.com"*
+(the target must be in your allowlist). Start with `scope`, then the read-only `safe` tools,
+then the playbooks.
 
 ## Safety model in one paragraph
 

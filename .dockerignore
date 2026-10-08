@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.github
+.idea
+.vscode
+assets
+test
+*.md
+!README.md
+!DISCLAIMER.md
+config.json
