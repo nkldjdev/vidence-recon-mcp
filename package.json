@@ -1,0 +1,55 @@
+{
+  "name": "vidence-recon-mcp",
+  "version": "0.1.0",
+  "description": "A safe, batteries-included Model Context Protocol (MCP) server that exposes common security-testing tools and OWASP-aligned playbooks to AI clients — for AUTHORIZED testing only.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "vidence-recon-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "config.example.json",
+    "README.md",
+    "LICENSE",
+    "DISCLAIMER.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "security",
+    "pentest",
+    "penetration-testing",
+    "appsec",
+    "nmap",
+    "nuclei",
+    "owasp",
+    "claude",
+    "ai"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}

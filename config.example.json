@@ -1,0 +1,19 @@
+{
+  "scope": {
+    "allowedTargets": ["localhost", "127.0.0.1", "scanme.nmap.org"]
+  },
+  "safety": {
+    "allowActive": true,
+    "allowIntrusive": false,
+    "allowRawArgs": false,
+    "minIntervalMs": 0
+  },
+  "limits": {
+    "commandTimeoutSec": 300,
+    "maxOutputBytes": 1048576
+  },
+  "tools": {
+    "nmap": "nmap",
+    "nuclei": "nuclei"
+  }
+}
