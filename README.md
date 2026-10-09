@@ -45,17 +45,34 @@ MCP client (Claude Desktop `claude_desktop_config.json`, Claude Code, …):
       "args": ["-y", "vidence-recon-mcp@latest"],
       "env": {
         "VIDENCE_RECON_MCP_ALLOWED_TARGETS": "example.com",
-        "VIDENCE_RECON_MCP_RUNNER": "docker"
+        "VIDENCE_RECON_MCP_RUNNER": "docker",
+        "VIDENCE_RECON_MCP_VERIFY_SECRET": "<your-secret>"
       }
     }
   }
 }
 ```
 
-Restart the client and ask it to run the `scope` tool. On first use the server pulls the
-`ghcr.io/nkldjdev/vidence-recon-mcp` image (several GB) and starts a background `vidence-kali`
-container — the first scan after that works, later runs are instant. Point
-`VIDENCE_RECON_MCP_ALLOWED_TARGETS` at the host(s) you're authorized to test.
+Generate the secret once and keep it (treat it like a password):
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Restart the client. **Two gates must pass before any tool runs:**
+
+1. **Scope** — the target is in `VIDENCE_RECON_MCP_ALLOWED_TARGETS`.
+2. **Ownership** — you've *proven* you control it. Ask your client to run the **`verify`** tool
+   with your target; it prints a DNS `TXT` record (or HTTP file) to publish. Publish it, then run
+   `verify` again until it reports `✅ VERIFIED`. (Why: [Ownership verification](#ownership-verification-authorization-lockdown).)
+
+> **Testing `localhost`, an internal IP, or a lab/CTF box you own outright?** A DNS/HTTP challenge
+> can't apply to those, so add `"VIDENCE_RECON_MCP_REQUIRE_VERIFICATION": "false"` to `env` to run
+> on the scope allowlist alone. Only do this for machines you fully own.
+
+On first use the server also pulls the `ghcr.io/nkldjdev/vidence-recon-mcp` image (several GB) and
+starts a background `vidence-kali` container — the first scan after that works, later runs are
+instant. Run the `scope` tool anytime to see exactly what's authorized right now.
 
 Knobs: `VIDENCE_RECON_MCP_AUTOSTART=false` to manage the container yourself,
 `VIDENCE_RECON_MCP_IMAGE=…` for a custom image, `VIDENCE_RECON_MCP_CONTAINER=…` to rename it.
@@ -72,9 +89,11 @@ There are already thin "let an LLM run nmap" wrappers. This project is different
    `web_owasp`, `web_quickscan`, `cms_wordpress`, `network_host`) chain tools and ask for a
    findings report — so you get an assessment, not a pile of raw output.
 2. **Safety is structural.** A **scope allowlist** means no tool runs against a host you did not
-   authorize (checked by resolved IP, including CIDR ranges). A **three-tier safety model**
-   (`safe` / `active` / `intrusive`) gates aggressive tools, and a hard **blocklist** stops the
-   destructive flags (`sqlmap --dump`, `--os-shell`, …) that would turn detection into an attack.
+   authorize (checked by resolved IP, including CIDR ranges), and — on by default — the server
+   requires **cryptographic proof you own the target** (a DNS/HTTP challenge) before any tool runs.
+   A **three-tier safety model** (`safe` / `active` / `intrusive`) gates aggressive tools, and a
+   hard **blocklist** stops the destructive flags (`sqlmap --dump`, `--os-shell`, …) that would
+   turn detection into an attack.
 3. **Detection-focused by design.** It is an assessment toolkit, not an exploitation framework
    (see *Scope & philosophy*).
 
@@ -246,14 +265,19 @@ cp config.example.json config.json    # then edit scope.allowedTargets
 
 ```jsonc
 {
-  "scope": { "allowedTargets": ["localhost", "127.0.0.1", "app.example.com", "10.0.0.0/24"] },
+  "scope": { "allowedTargets": ["app.example.com"] },
   "safety": { "allowActive": true, "allowIntrusive": false, "allowRawArgs": false, "minIntervalMs": 0 },
+  // Ownership verification is required by default: set a stable secret and prove each PUBLIC
+  // target with the `verify` tool. For localhost / internal IPs / a lab you own outright, set
+  // "required": false instead — they can't satisfy a DNS/HTTP challenge.
+  "verification": { "required": true, "secret": "<64-hex from crypto.randomBytes>", "methods": ["dns", "http"], "cacheTtlSec": 3600 },
   "limits": { "commandTimeoutSec": 300, "maxOutputBytes": 1048576 }
 }
 ```
 
 Env overrides: `VIDENCE_RECON_MCP_CONFIG`, `VIDENCE_RECON_MCP_ALLOWED_TARGETS=a,b,c`,
-`VIDENCE_RECON_MCP_ALLOW_INTRUSIVE=true`.
+`VIDENCE_RECON_MCP_ALLOW_INTRUSIVE=true`, `VIDENCE_RECON_MCP_VERIFY_SECRET=…`,
+`VIDENCE_RECON_MCP_REQUIRE_VERIFICATION=false` (allowlist-only, for hosts you own outright).
 
 **Claude Desktop:**
 
@@ -272,16 +296,19 @@ Env overrides: `VIDENCE_RECON_MCP_CONFIG`, `VIDENCE_RECON_MCP_ALLOWED_TARGETS=a,
 ### Then run
 
 Restart Claude and ask: *"Run the `web_quickscan` playbook against https://app.example.com"*
-(the target must be in your allowlist). Start with `scope`, then the read-only `safe` tools,
-then the playbooks.
+(the target must be in your allowlist **and** verified). Start with `scope` to see what's
+authorized, run `verify` to prove ownership (or set `REQUIRE_VERIFICATION=false` for a host you
+own outright), then the read-only `safe` tools, then the playbooks.
 
 ## Safety model in one paragraph
 
 Every tool call is (1) gated to its safety tier, (2) refused unless the target resolves entirely
-within your allowlist, (3) built from structured parameters with **no shell** (so argument values
-can't inject commands), and (4) screened against a destructive-flag blocklist. The server can't
-enforce that *you* are authorized — that's on you, and you assert it by configuring scope — but
-it makes misuse hard and accidents unlikely.
+within your allowlist, (3) refused unless you've *proven* you own the target (DNS/HTTP challenge,
+on by default), (4) built from structured parameters with **no shell** (so argument values can't
+inject commands), and (5) screened against a destructive-flag blocklist. The allowlist is your
+assertion of intent; ownership verification is the proof that backs it — together they make
+pointing this at someone else's systems structurally hard, not merely forbidden. (You can drop
+gate 3 for hosts you own outright, but then authorization rests on the allowlist alone.)
 
 ## Contributing
 
