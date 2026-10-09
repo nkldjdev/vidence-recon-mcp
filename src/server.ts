@@ -1,11 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { Config } from "./config.js";
-import { checkScope } from "./scope.js";
-import { run } from "./exec.js";
+import type { Runner } from "./runner.js";
+import type { Verifier } from "./verify.js";
+import { checkScope, extractHost } from "./scope.js";
+import { verificationInstructions } from "./verify.js";
 import { TOOLS } from "./tools/specs.js";
 import { PLAYBOOKS } from "./playbooks.js";
-import { ensureToolHostOnce } from "./provision.js";
 import {
   isTierAllowed,
   tierRefusalMessage,
@@ -25,7 +26,7 @@ async function rateGate(minIntervalMs: number) {
   lastRun = Date.now();
 }
 
-export function buildServer(cfg: Config): McpServer {
+export function buildServer(cfg: Config, runner: Runner, verifier: Verifier): McpServer {
   const server = new McpServer({ name: "vidence-recon-mcp", version: "0.1.2" });
 
   // Introspection tool: what's authorized right now.
@@ -41,8 +42,59 @@ export function buildServer(cfg: Config): McpServer {
           `Authorized targets: ${cfg.scope.allowedTargets.length ? cfg.scope.allowedTargets.join(", ") : "(none — set scope.allowedTargets)"}`,
           `Tiers enabled: safe=always, active=${cfg.safety.allowActive}, intrusive=${cfg.safety.allowIntrusive}`,
           `Raw extra-args passthrough: ${cfg.safety.allowRawArgs}`,
+          `Ownership verification: required=${cfg.verification.required}` +
+            (cfg.verification.required
+              ? `, methods=${cfg.verification.methods.join("/")}, secret ${cfg.verification.secret ? "set" : "NOT set — run 'verify'"}`
+              : " (DISABLED — allowlisted targets are trusted on assertion)"),
         ].join("\n"),
       ),
+  );
+
+  // Setup tool: prove you control a target so tools may run against it. This is
+  // the easy, safe on-ramp to the lockdown — it prints the exact challenge to
+  // publish and reports live verification status.
+  server.tool(
+    "verify",
+    "Prove ownership of a target so tools may run against it. Shows the DNS TXT / HTTP challenge to publish and checks current status.",
+    { target: z.string().describe("domain or host you want to authorize, e.g. example.com") },
+    async ({ target }) => {
+      const host = extractHost(String(target));
+      if (!cfg.verification.required) {
+        return text(
+          `Ownership verification is DISABLED (verification.required=false). Allowlisted targets are testable without proof. Set it to true to require proven ownership.`,
+        );
+      }
+      if (!cfg.verification.secret) {
+        return text(
+          [
+            "No verification.secret is set — ownership can't be proven yet.",
+            "",
+            "Generate a stable, private secret once and keep it (treat it like a password):",
+            `  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`,
+            "",
+            "Then set it via VIDENCE_RECON_MCP_VERIFY_SECRET (or verification.secret in config.json) and re-run verify.",
+          ].join("\n"),
+        );
+      }
+      const ins = verificationInstructions(cfg.verification.secret, host);
+      const status = await verifier.verify(host);
+      return text(
+        [
+          `Ownership verification for ${ins.host}`,
+          status.verified
+            ? `✅ VERIFIED via ${status.method} — tools may run against ${ins.host}.`
+            : `❌ NOT YET VERIFIED — publish ONE of these, then re-run verify:`,
+          "",
+          "DNS (recommended):",
+          `  ${ins.dns.record}  TXT  "${ins.dns.value}"`,
+          "",
+          "HTTP (alternative) — serve this exact URL returning 200, no redirect, body containing the token:",
+          `  ${ins.http.url}`,
+          "",
+          `This token is unique to your secret + ${ins.host}; nobody without your secret can compute it, and you can only publish it on a host you control.`,
+        ].join("\n"),
+      );
+    },
   );
 
   // Register every tool spec uniformly, with scope + safety + arg screening.
@@ -57,13 +109,19 @@ export function buildServer(cfg: Config): McpServer {
           return text(`Refused: ${tierRefusalMessage(spec.safety)}`);
         }
 
-        // 2. Scope gate.
+        // 2. Scope gate — the target must be in the operator's declared scope.
         const target = String(input[spec.targetField] ?? "");
         if (!target) return text(`Refused: missing '${spec.targetField}'.`);
         const scope = await checkScope(target, cfg.scope.allowedTargets);
         if (!scope.authorized) return text(`Refused (out of scope): ${scope.reason}`);
 
-        // 3. Build args; screen any extra args.
+        // 3. Ownership gate — and the operator must have PROVEN they control it.
+        //    This is the lockdown: being in scope is an assertion; verification
+        //    is proof. No proof, no tool. (Use the 'verify' tool to set it up.)
+        const ownership = await verifier.verify(target);
+        if (!ownership.verified) return text(`Refused (unverified target): ${ownership.reason}`);
+
+        // 4. Build args; screen any extra args.
         let args: string[];
         try {
           args = spec.buildArgs(input);
@@ -80,35 +138,15 @@ export function buildServer(cfg: Config): McpServer {
           args = [...args, ...extra];
         }
 
-        // 4. Run — either the binary directly (local) or inside a persistent
-        //    Kali container via `docker exec` (docker mode).
+        // 5. Resolve the binary (config override wins) and run it through the
+        //    configured runner. The runner hides whether that's a direct local
+        //    binary or a `docker exec` into the Kali tool host.
         await rateGate(cfg.safety.minIntervalMs);
-        const toolBinary = cfg.tools[spec.binaryKey] || spec.binary;
-        let binary = toolBinary;
-        let runArgs = args;
-        if (cfg.runner.mode === "docker") {
-          binary = cfg.runner.dockerPath;
-          runArgs = ["exec", cfg.runner.container, toolBinary, ...args];
-        }
+        const binary = cfg.tools[spec.binaryKey] || spec.binary;
         const timeoutMs = (spec.timeoutSec ?? cfg.limits.commandTimeoutSec) * 1000;
-        const res = await run(binary, runArgs, { timeoutMs, maxBytes: cfg.limits.maxOutputBytes });
+        const res = await runner.exec(binary, args, { timeoutMs, maxBytes: cfg.limits.maxOutputBytes });
 
-        // In docker mode, give a clear message while the tool host is still coming up.
-        if (cfg.runner.mode === "docker" && res.code !== 0) {
-          const e = (res.stderr || res.stdout || "").toLowerCase();
-          if (e.includes("no such container") || e.includes("is not running") || e.includes("cannot connect to the docker")) {
-            // Lazily (re)provision — e.g. if Docker Desktop started after the
-            // server did, or the container hasn't finished coming up. Deduped,
-            // so concurrent tool calls don't stack overlapping pulls.
-            void ensureToolHostOnce(cfg).catch(() => {});
-            return text(
-              `The '${cfg.runner.container}' tool host isn't ready yet. On first run it pulls a multi-GB Kali image and starts the container, which can take a few minutes. It's being (re)started now — make sure Docker Desktop is running, then retry shortly.`,
-            );
-          }
-        }
-
-        const shown = cfg.runner.mode === "docker" ? `${toolBinary} ${args.join(" ")}` : `${binary} ${args.join(" ")}`;
-        const header = `$ ${shown}\n(scope: ${scope.reason})\n`;
+        const header = `$ ${binary} ${args.join(" ")}\n(scope: ${scope.reason})\n`;
         if (res.timedOut) return text(`${header}\n[timed out after ${timeoutMs / 1000}s]\n${res.stdout}`);
         const body = res.stdout || res.stderr || `[no output, exit ${res.code}]`;
         return text(`${header}\n${body}`);

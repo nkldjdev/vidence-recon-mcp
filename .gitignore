@@ -8,3 +8,10 @@ coverage/
 .idea/
 .vscode/
 *.iml
+
+# graphify: keep the graph + reports, drop regenerable caches, dated backup
+# snapshots, and machine-specific path pointers.
+graphify-out/cache/
+graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+graphify-out/.graphify_root
+graphify-out/.graphify_python

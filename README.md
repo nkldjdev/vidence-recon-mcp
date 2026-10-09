@@ -87,6 +87,34 @@ keeps the project legal to publish, trustworthy to run, and welcome in a communi
 architecture is extensible — you can add tools — but contributions that cross into weaponized
 exploitation will not be merged into core.
 
+## Ownership verification (authorization lockdown)
+
+Being on the allowlist is an *assertion* ("this is mine"). Before any tool runs, the server also
+requires **proof** that you control the target — so the engine is structurally confined to assets
+you actually own. This is **on by default** (`verification.required: true`).
+
+Each target's challenge token is `HMAC-SHA256(your-secret, host)`. Publishing it requires both
+your private secret **and** control of the host's DNS or web root — so you can't point this at
+someone else's domain, and nobody without your secret can forge a token for one of yours.
+
+**Setup (one minute):**
+
+1. Generate a stable, private secret once and keep it (treat it like a password):
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
+   Set it as `VIDENCE_RECON_MCP_VERIFY_SECRET` (or `verification.secret` in `config.json`).
+2. Call the **`verify`** tool with your target — it prints the exact DNS `TXT` record (or HTTP
+   `.well-known` file) to publish.
+3. Publish that record, then call `verify` again. Once it reports `✅ VERIFIED`, tools may run
+   against that target. Positive results are cached for `verification.cacheTtlSec`.
+
+The HTTP check refuses redirects (the proof must be served directly), and verification is
+re-checked per target. For an isolated lab/CTF box you own outright, set
+`verification.required: false` (or `VIDENCE_RECON_MCP_REQUIRE_VERIFICATION=false`) to fall back to
+allowlist-only. See [`src/verify.ts`](src/verify.ts) and
+[`docs/DESIGN_OFFENSIVE_ENGINE.md`](docs/DESIGN_OFFENSIVE_ENGINE.md) §5.
+
 ## Tools
 
 | Tool | Tier | What it does |
@@ -102,7 +130,8 @@ exploitation will not be merged into core.
 | `content_fuzz` | active | Fuzzing (ffuf) |
 | `wpscan` | active | WordPress enumeration |
 | `sqli_detect` | intrusive | SQLi **detection** via sqlmap (data-extraction flags blocked) |
-| `scope` | — | Show authorized scope + enabled tiers |
+| `verify` | — | Prove you own a target (DNS/HTTP challenge) so tools may run against it |
+| `scope` | — | Show authorized scope + enabled tiers + verification status |
 
 Tools are declared as specs in [`src/tools/specs.ts`](src/tools/specs.ts) — adding one is a few
 lines (see [CONTRIBUTING.md](CONTRIBUTING.md)).

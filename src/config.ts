@@ -15,6 +15,19 @@ const ConfigSchema = z.object({
       minIntervalMs: z.number().int().nonnegative().default(0),
     })
     .default({}),
+  // Ownership verification: a target must be PROVEN-owned (not merely
+  // allowlisted) before any tool will run against it. See src/verify.ts and
+  // docs/DESIGN_OFFENSIVE_ENGINE.md §5. Required by default — this is the
+  // lockdown that keeps the engine pointed only at assets the operator controls.
+  // Set required=false only for isolated labs/CTF boxes you own outright.
+  verification: z
+    .object({
+      required: z.boolean().default(true),
+      secret: z.string().default(""),
+      methods: z.array(z.enum(["dns", "http"])).default(["dns", "http"]),
+      cacheTtlSec: z.number().int().nonnegative().default(3600),
+    })
+    .default({}),
   limits: z
     .object({
       commandTimeoutSec: z.number().int().positive().default(300),
@@ -72,6 +85,14 @@ export function loadConfig(): Config {
   }
   if (process.env.VIDENCE_RECON_MCP_ALLOW_INTRUSIVE === "true") {
     cfg.safety.allowIntrusive = true;
+  }
+
+  const verifySecret = process.env.VIDENCE_RECON_MCP_VERIFY_SECRET;
+  if (verifySecret) {
+    cfg.verification.secret = verifySecret;
+  }
+  if (process.env.VIDENCE_RECON_MCP_REQUIRE_VERIFICATION === "false") {
+    cfg.verification.required = false;
   }
 
   const runnerMode = process.env.VIDENCE_RECON_MCP_RUNNER;

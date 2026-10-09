@@ -8,6 +8,12 @@
     "allowRawArgs": false,
     "minIntervalMs": 0
   },
+  "verification": {
+    "required": true,
+    "secret": "CHANGE-ME — run: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    "methods": ["dns", "http"],
+    "cacheTtlSec": 3600
+  },
   "limits": {
     "commandTimeoutSec": 300,
     "maxOutputBytes": 1048576
