@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "A safe, batteries-included Model Context Protocol (MCP) server that exposes common security-testing tools and OWASP-aligned playbooks to AI clients — for AUTHORIZED testing only.",
   "license": "MIT",
+  "author": "Nikola Djurovic (Vidence)",
+  "homepage": "https://github.com/nkldjdev/vidence-recon-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nkldjdev/vidence-recon-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/nkldjdev/vidence-recon-mcp/issues"
+  },
   "type": "module",
   "bin": {
     "vidence-recon-mcp": "dist/index.js"

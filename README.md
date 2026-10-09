@@ -31,6 +31,46 @@ with severity and remediation.
 
 ---
 
+## Quick start (npx)
+
+The **server** installs with no clone or build via `npx`. It still needs the **tools** — either
+the `vidence-kali` container (below) or the tools on your own `PATH` (e.g. you're on Kali).
+
+**1. Start the Kali tool host once** (build the image from a clone of this repo, or `docker pull`
+it once an image is published):
+
+```bash
+docker build -t vidence-recon-mcp .          # from a clone of this repo
+docker run -d --name vidence-kali \
+  --cap-add=NET_RAW --cap-add=NET_ADMIN \
+  --entrypoint sleep vidence-recon-mcp infinity
+```
+
+**2. Add the server to your MCP client** (Claude Desktop `claude_desktop_config.json`, Claude
+Code, etc.):
+
+```json
+{
+  "mcpServers": {
+    "vidence-recon": {
+      "command": "npx",
+      "args": ["-y", "vidence-recon-mcp@latest"],
+      "env": {
+        "VIDENCE_RECON_MCP_ALLOWED_TARGETS": "example.com",
+        "VIDENCE_RECON_MCP_RUNNER": "docker",
+        "VIDENCE_RECON_MCP_CONTAINER": "vidence-kali"
+      }
+    }
+  }
+}
+```
+
+Restart the client, then ask it to run the `scope` tool. **Already on Kali** with the tools on
+`PATH`? Drop step 1 and the `RUNNER`/`CONTAINER` env vars — the server runs the tools locally.
+For the full manual options (all-in-one Docker image, native build), see **Running it** below.
+
+---
+
 ## Why this exists
 
 There are already thin "let an LLM run nmap" wrappers. This project is different in three ways:
