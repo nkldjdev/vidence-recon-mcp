@@ -27,8 +27,9 @@ RUN npm run build && npm prune --omit=dev
 FROM kalilinux/kali-rolling
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Node runtime + the detection toolset. seclists/wordlists give the fuzzing
-# playbooks a wordlist at /usr/share/seclists and /usr/share/wordlists.
+# Node runtime + the detection toolset. dnsutils provides `dig` (used by the
+# dns_enum tool). seclists/wordlists give the fuzzing playbooks a wordlist at
+# /usr/share/seclists and /usr/share/wordlists.
 RUN apt-get update && \
     apt-get -y install --no-install-recommends \
       nodejs \
@@ -36,10 +37,6 @@ RUN apt-get update && \
       dnsutils curl ca-certificates \
       seclists wordlists && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Optional extras that may not exist in every mirror — never fail the build.
-RUN apt-get update && apt-get -y install --no-install-recommends dnsx 2>/dev/null; \
-    apt-get clean && rm -rf /var/lib/apt/lists/* || true
 
 # Pre-pull Nuclei templates so the first scan isn't slow (ignore if offline).
 RUN nuclei -update-templates 2>/dev/null || true

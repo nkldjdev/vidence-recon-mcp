@@ -93,7 +93,7 @@ exploitation will not be merged into core.
 |---|---|---|
 | `http_headers` | safe | HTTP response headers (curl) |
 | `whatweb` | safe | Web tech/stack fingerprinting |
-| `dns_enum` | safe | DNS records via dnsx |
+| `dns_enum` | safe | DNS records via dig |
 | `tls_scan` | safe | TLS/SSL config + cert (sslscan) |
 | `nmap_scan` | active | Ports + service/version |
 | `nikto_scan` | active | Web server known-issue scan |

@@ -31,17 +31,30 @@ export const TOOLS: ToolSpec[] = [
     safety: "safe",
     input: z.object({ url: z.string().describe("Target URL") }),
     targetField: "url",
-    buildArgs: (i) => ["--color=never", "--no-errors", String(i.url)],
+    // A real browser User-Agent so WAFs (Cloudflare, etc.) don't blackhole the
+    // default whatweb UA and return an empty result.
+    buildArgs: (i) => [
+      "--color=never",
+      "--no-errors",
+      "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      String(i.url),
+    ],
   },
   {
     name: "dns_enum",
-    description: "Resolve DNS records (A/AAAA/MX/TXT/NS) for a domain via dnsx. Safe.",
-    binary: "dnsx",
-    binaryKey: "dnsx",
+    description: "Resolve DNS records (A/AAAA/MX/TXT/NS) for a domain via dig. Safe.",
+    binary: "dig",
+    binaryKey: "dig",
     safety: "safe",
     input: z.object({ domain: z.string().describe("Domain, e.g. example.com") }),
     targetField: "domain",
-    buildArgs: (i) => ["-silent", "-a", "-aaaa", "-mx", "-txt", "-ns", "-resp", "-d", String(i.domain)],
+    // Use dig (from dnsutils) instead of dnsx: the dnsx apt package shipped a
+    // broken/mismatched binary ("exec format error"). dig is always present and
+    // reliable. One batched query returns A/AAAA/MX/NS/TXT in a single call.
+    buildArgs: (i) => {
+      const d = String(i.domain);
+      return ["+noall", "+answer", d, "A", d, "AAAA", d, "MX", d, "NS", d, "TXT"];
+    },
   },
   {
     name: "tls_scan",

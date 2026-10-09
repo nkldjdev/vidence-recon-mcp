@@ -5,6 +5,7 @@ import { checkScope } from "./scope.js";
 import { run } from "./exec.js";
 import { TOOLS } from "./tools/specs.js";
 import { PLAYBOOKS } from "./playbooks.js";
+import { ensureToolHostOnce } from "./provision.js";
 import {
   isTierAllowed,
   tierRefusalMessage,
@@ -25,7 +26,7 @@ async function rateGate(minIntervalMs: number) {
 }
 
 export function buildServer(cfg: Config): McpServer {
-  const server = new McpServer({ name: "vidence-recon-mcp", version: "0.1.0" });
+  const server = new McpServer({ name: "vidence-recon-mcp", version: "0.1.2" });
 
   // Introspection tool: what's authorized right now.
   server.tool(
@@ -96,8 +97,12 @@ export function buildServer(cfg: Config): McpServer {
         if (cfg.runner.mode === "docker" && res.code !== 0) {
           const e = (res.stderr || res.stdout || "").toLowerCase();
           if (e.includes("no such container") || e.includes("is not running") || e.includes("cannot connect to the docker")) {
+            // Lazily (re)provision — e.g. if Docker Desktop started after the
+            // server did, or the container hasn't finished coming up. Deduped,
+            // so concurrent tool calls don't stack overlapping pulls.
+            void ensureToolHostOnce(cfg).catch(() => {});
             return text(
-              `The '${cfg.runner.container}' tool host isn't ready yet. On first run it pulls a multi-GB Kali image and starts the container, which can take a few minutes. Make sure Docker Desktop is running, then retry shortly.`,
+              `The '${cfg.runner.container}' tool host isn't ready yet. On first run it pulls a multi-GB Kali image and starts the container, which can take a few minutes. It's being (re)started now — make sure Docker Desktop is running, then retry shortly.`,
             );
           }
         }
