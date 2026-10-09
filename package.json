@@ -1,6 +1,6 @@
 {
   "name": "vidence-recon-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A safe, batteries-included Model Context Protocol (MCP) server that exposes common security-testing tools and OWASP-aligned playbooks to AI clients — for AUTHORIZED testing only.",
   "license": "MIT",
   "author": "Nikola Djurovic (Vidence)",
