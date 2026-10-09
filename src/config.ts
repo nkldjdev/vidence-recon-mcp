@@ -33,6 +33,12 @@ const ConfigSchema = z.object({
       mode: z.enum(["local", "docker"]).default("local"),
       container: z.string().default("vidence-kali"),
       dockerPath: z.string().default("docker"),
+      // Image to auto-provision the tool host from (docker mode). `docker run`
+      // auto-pulls it if not present locally — the first pull is several GB.
+      image: z.string().default("ghcr.io/nkldjdev/vidence-recon-mcp:latest"),
+      // When true (docker mode), the server ensures the tool-host container is
+      // running on startup: start it if stopped, or pull+create it if missing.
+      autostart: z.boolean().default(true),
     })
     .default({}),
   tools: z.record(z.string()).default({}),
@@ -74,6 +80,12 @@ export function loadConfig(): Config {
   }
   if (process.env.VIDENCE_RECON_MCP_CONTAINER) {
     cfg.runner.container = process.env.VIDENCE_RECON_MCP_CONTAINER;
+  }
+  if (process.env.VIDENCE_RECON_MCP_IMAGE) {
+    cfg.runner.image = process.env.VIDENCE_RECON_MCP_IMAGE;
+  }
+  if (process.env.VIDENCE_RECON_MCP_AUTOSTART === "false") {
+    cfg.runner.autostart = false;
   }
 
   return cfg;

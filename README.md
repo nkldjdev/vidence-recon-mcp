@@ -33,21 +33,9 @@ with severity and remediation.
 
 ## Quick start (npx)
 
-The **server** installs with no clone or build via `npx`. It still needs the **tools** — either
-the `vidence-kali` container (below) or the tools on your own `PATH` (e.g. you're on Kali).
-
-**1. Start the Kali tool host once** (build the image from a clone of this repo, or `docker pull`
-it once an image is published):
-
-```bash
-docker build -t vidence-recon-mcp .          # from a clone of this repo
-docker run -d --name vidence-kali \
-  --cap-add=NET_RAW --cap-add=NET_ADMIN \
-  --entrypoint sleep vidence-recon-mcp infinity
-```
-
-**2. Add the server to your MCP client** (Claude Desktop `claude_desktop_config.json`, Claude
-Code, etc.):
+You need **Docker Desktop installed and running** — that's the only prerequisite. The server
+installs via `npx` and **pulls the Kali tool host automatically on first run**. Add this to your
+MCP client (Claude Desktop `claude_desktop_config.json`, Claude Code, …):
 
 ```json
 {
@@ -57,17 +45,22 @@ Code, etc.):
       "args": ["-y", "vidence-recon-mcp@latest"],
       "env": {
         "VIDENCE_RECON_MCP_ALLOWED_TARGETS": "example.com",
-        "VIDENCE_RECON_MCP_RUNNER": "docker",
-        "VIDENCE_RECON_MCP_CONTAINER": "vidence-kali"
+        "VIDENCE_RECON_MCP_RUNNER": "docker"
       }
     }
   }
 }
 ```
 
-Restart the client, then ask it to run the `scope` tool. **Already on Kali** with the tools on
-`PATH`? Drop step 1 and the `RUNNER`/`CONTAINER` env vars — the server runs the tools locally.
-For the full manual options (all-in-one Docker image, native build), see **Running it** below.
+Restart the client and ask it to run the `scope` tool. On first use the server pulls the
+`ghcr.io/nkldjdev/vidence-recon-mcp` image (several GB) and starts a background `vidence-kali`
+container — the first scan after that works, later runs are instant. Point
+`VIDENCE_RECON_MCP_ALLOWED_TARGETS` at the host(s) you're authorized to test.
+
+Knobs: `VIDENCE_RECON_MCP_AUTOSTART=false` to manage the container yourself,
+`VIDENCE_RECON_MCP_IMAGE=…` for a custom image, `VIDENCE_RECON_MCP_CONTAINER=…` to rename it.
+**Already on Kali** with the tools on `PATH`? Drop the `RUNNER` var — the server runs them
+locally. Full manual options (all-in-one image, native build) are under **Running it** below.
 
 ---
 

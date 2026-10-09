@@ -15,7 +15,9 @@
   "runner": {
     "mode": "local",
     "container": "vidence-kali",
-    "dockerPath": "docker"
+    "dockerPath": "docker",
+    "image": "ghcr.io/nkldjdev/vidence-recon-mcp:latest",
+    "autostart": true
   },
   "tools": {
     "nmap": "nmap",

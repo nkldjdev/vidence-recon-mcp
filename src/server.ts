@@ -92,6 +92,16 @@ export function buildServer(cfg: Config): McpServer {
         const timeoutMs = (spec.timeoutSec ?? cfg.limits.commandTimeoutSec) * 1000;
         const res = await run(binary, runArgs, { timeoutMs, maxBytes: cfg.limits.maxOutputBytes });
 
+        // In docker mode, give a clear message while the tool host is still coming up.
+        if (cfg.runner.mode === "docker" && res.code !== 0) {
+          const e = (res.stderr || res.stdout || "").toLowerCase();
+          if (e.includes("no such container") || e.includes("is not running") || e.includes("cannot connect to the docker")) {
+            return text(
+              `The '${cfg.runner.container}' tool host isn't ready yet. On first run it pulls a multi-GB Kali image and starts the container, which can take a few minutes. Make sure Docker Desktop is running, then retry shortly.`,
+            );
+          }
+        }
+
         const shown = cfg.runner.mode === "docker" ? `${toolBinary} ${args.join(" ")}` : `${binary} ${args.join(" ")}`;
         const header = `$ ${shown}\n(scope: ${scope.reason})\n`;
         if (res.timedOut) return text(`${header}\n[timed out after ${timeoutMs / 1000}s]\n${res.stdout}`);

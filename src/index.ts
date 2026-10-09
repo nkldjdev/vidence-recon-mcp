@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 import { buildServer } from "./server.js";
 import { SAFETY_BANNER } from "./safety.js";
+import { ensureToolHost } from "./provision.js";
 
 async function main() {
   // Banner goes to stderr so it never corrupts the stdio MCP channel (stdout).
@@ -18,6 +19,12 @@ async function main() {
   const server = buildServer(cfg);
   const transport = new StdioServerTransport();
   await server.connect(transport);
+
+  // Provision the Kali tool host in the BACKGROUND, after the handshake, so a
+  // slow first image pull never blocks the client connection.
+  void ensureToolHost(cfg).catch((e) =>
+    process.stderr.write(`[vidence-recon-mcp] tool-host provisioning error: ${e instanceof Error ? e.message : String(e)}\n`),
+  );
 }
 
 main().catch((err) => {
